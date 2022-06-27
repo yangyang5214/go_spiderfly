@@ -7,7 +7,7 @@ from werkzeug.routing import BaseConverter
 
 app = Flask(__name__)
 
-domain = 'https://www.beer5214.com'
+domain = 'https://10.0.83.1'
 
 
 class RegexConverter(BaseConverter):

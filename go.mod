@@ -5,6 +5,7 @@ go 1.17
 require (
 	github.com/chromedp/cdproto v0.0.0-20220624030920-1958475a8671
 	github.com/chromedp/chromedp v0.8.2
+	github.com/sirupsen/logrus v1.8.1
 )
 
 require (

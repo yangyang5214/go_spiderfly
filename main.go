@@ -1,79 +1,90 @@
 package main
 
 import (
-	"context"
-	"fmt"
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
-	"io/ioutil"
-	"log"
-	"os"
-	"path/filepath"
-	"strings"
+	"github.com/sirupsen/logrus"
+	"pvp_spiderfly/src/engine"
+	"pvp_spiderfly/src/logger"
+	"pvp_spiderfly/src/tools"
+	"sync"
 	"time"
 )
 
 const (
 	ChromePath = "/Users/beer/java/chrome-mac/Chromium.app/Contents/MacOS/Chromium"
-	Headless   = true
+	Headless   = false
+	TargetDir  = "./tmp"
+	EntryPoint = "https://10.0.83.1/web/frame/login.html"
 )
 
 func main() {
-	options := []chromedp.ExecAllocatorOption{
-		//all config see allocate.go
-		chromedp.ExecPath(ChromePath), //可忽略，直接用 chrome
-		chromedp.Flag("headless", Headless),
-		chromedp.Flag("ignore-certificate-errors", true), //ignoreHTTPSErrors
-		chromedp.Flag("no-sandbox", true),
-		chromedp.WindowSize(1920, 1080),
-	}
-	ctx_, cancel_ := chromedp.NewExecAllocator(
-		context.Background(), options...)
-	defer cancel_()
-	ctx, cancel := chromedp.NewContext(ctx_)
-	defer cancel()
-	url := "https://www.beer5214.com/"
 
-	chromedp.ListenTarget(ctx, func(ev interface{}) {
-		if ev, ok := ev.(*network.EventResponseReceived); ok {
-			fmt.Println("event received:")
-			fmt.Println(ev.Type)
+	domain := tools.GetDomain(EntryPoint)
 
+	logger.Logger.WithFields(logrus.Fields{
+		"EntryPoint": EntryPoint,
+	}).Info()
+
+	var wg sync.WaitGroup
+	extraHeaders := map[string]interface{}{}
+	browser := engine.InitBrowser(ChromePath, extraHeaders, Headless)
+
+	//request_id => response_url
+	//request_url => redirect_url
+	urlMap := map[string]string{}
+
+	chromedp.ListenTarget(browser.Ctx, func(event interface{}) {
+		switch ev := event.(type) {
+		case *network.EventRequestWillBeSent:
+			if ev.RedirectResponse != nil {
+				urlMap[ev.DocumentURL] = ev.RedirectResponse.URL
+			}
+		case *network.EventLoadingFinished:
+			wg.Add(1)
+			logger.Logger.WithFields(logrus.Fields{
+				"EventLoadingFinished-RequestID": ev.RequestID.String(),
+			}).Debug()
 			go func() {
-				c := chromedp.FromContext(ctx)
-				rbp := network.GetResponseBody(ev.RequestID)
-				body, err := rbp.Do(cdp.WithExecutor(ctx, c.Target))
+				c := chromedp.FromContext(browser.Ctx)
+				body, err := network.GetResponseBody(ev.RequestID).Do(cdp.WithExecutor(browser.Ctx, c.Target))
 				if err != nil {
-					fmt.Println(err)
+					logger.Logger.WithFields(logrus.Fields{
+						"GetResponseBody": err.Error(),
+					}).Error()
+					defer wg.Done()
+					return
 				}
+				url := urlMap[ev.RequestID.String()]
+				finalPath := tools.GetFilePathByUrl(domain, TargetDir, url)
 
-				path := strings.Replace(ev.Response.URL, url, "", 1)
-				fileName := ""
-				if path == "" {
-					fileName = "index.html"
-				} else {
-					fileName = path
+				tools.WriteFile(finalPath, body)
+
+				redirectUrl := urlMap[url]
+				if redirectUrl != "" {
+					tools.WriteFile(tools.GetFilePathByUrl(domain, TargetDir, redirectUrl), body)
 				}
-				finalPath := filepath.Join("tmp", fileName)
-				if err = os.MkdirAll(filepath.Dir(finalPath), os.ModePerm); err != nil {
-					//ignore
-				}
-				if len(body) != 0 {
-					if err = ioutil.WriteFile(finalPath, body, os.ModePerm); err != nil {
-						log.Fatal(err)
-					}
-				}
+				defer wg.Done()
 			}()
+
+		case *network.EventResponseReceived:
+			logger.Logger.WithFields(logrus.Fields{
+				"EventResponseReceived-RequestID": ev.RequestID.String(),
+				"EventResponseReceived-URL":       ev.Response.URL,
+			}).Debug()
+			urlMap[ev.RequestID.String()] = ev.Response.URL
 		}
 	})
 
-	err := chromedp.Run(ctx,
+	err := chromedp.Run(browser.Ctx,
 		network.Enable(),
-		chromedp.Navigate(url),
-		chromedp.Sleep(time.Second*60), //todo
+		chromedp.Navigate(EntryPoint),
+		chromedp.Sleep(time.Second*10), //todo
 	)
 	if err != nil {
-		log.Println(err)
+		logger.Logger.Error(err)
 	}
+	wg.Wait()
+	browser.Close()
 }
