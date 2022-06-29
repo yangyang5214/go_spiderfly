@@ -10,7 +10,9 @@ import (
 
 func WriteFile(finalPath string, content []byte) {
 	if err := os.MkdirAll(filepath.Dir(finalPath), os.ModePerm); err != nil {
-		logger.Logger.Error("mkdir error: {}", err)
+		logger.Logger.WithFields(logrus.Fields{
+			"Path": finalPath,
+		}).Info("mkdir error")
 	}
 
 	if len(content) != 0 {

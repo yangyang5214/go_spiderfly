@@ -1,13 +1,10 @@
 import json
 import os
 
-import requests
 from flask import Flask, Response, request
 from werkzeug.routing import BaseConverter
 
 app = Flask(__name__)
-
-domain = 'https://10.0.83.1'
 
 
 class RegexConverter(BaseConverter):
@@ -15,6 +12,9 @@ class RegexConverter(BaseConverter):
     def __init__(self, map, regex):
         super(RegexConverter, self).__init__(map)
         self.regex = regex
+
+
+root_dir = '/Users/beer/beer/go_spiderfly/tmp/www.baidu.com'
 
 
 def service_svc(request):
@@ -31,19 +31,18 @@ def sub_path(original_url=None):
     path = request.path[1:]
     if path == '':
         path = "index.html"
-    final_path = os.path.join(os.getcwd(), 'tmp', path)
+    final_path = os.path.join(root_dir, path)
     if os.path.exists(final_path) and os.path.isfile(final_path):
         return read_file(final_path)
 
     # use full_path try
-    final_path = os.path.join(os.getcwd(), 'tmp', request.full_path[1:])
+    final_path = os.path.join(root_dir, request.full_path[1:])
     if os.path.exists(final_path) and os.path.isfile(final_path):
         return read_file(final_path)
 
     html_map = {}
     source = html_map.get(request.path, html_map.get(request.full_path))
     if not source:
-        print(domain + request.full_path)
         return Response(status=404)
 
     return read_file(source)

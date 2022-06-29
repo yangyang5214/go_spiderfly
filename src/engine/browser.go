@@ -2,8 +2,10 @@ package engine
 
 import (
 	"context"
+	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 	"pvp_spiderfly/src/logger"
+	"strings"
 )
 
 type Browser struct {
@@ -35,4 +37,20 @@ func InitBrowser(chromiumPath string, extraHeaders map[string]interface{}, hasHe
 func (bro *Browser) Close() {
 	logger.Logger.Info("closing browser.")
 	(bro.Cancel)()
+}
+
+func (bro *Browser) GetCookies(cookie string) []*network.CookieParam {
+	var cookies []*network.CookieParam
+	if cookie == "" {
+		return cookies
+	}
+	cookieArr := strings.Split(cookie, ";")
+	for i := 0; i < len(cookieArr); i++ {
+		cookieArrs := strings.Split(cookieArr[i], "=")
+		cookies = append(cookies, &network.CookieParam{
+			Name:  strings.Trim(cookieArrs[0], " "),
+			Value: strings.Trim(cookieArrs[1], " "),
+		})
+	}
+	return cookies
 }

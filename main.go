@@ -5,23 +5,31 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 	"github.com/sirupsen/logrus"
+	"net/url"
 	"pvp_spiderfly/src/engine"
 	"pvp_spiderfly/src/logger"
+	"pvp_spiderfly/src/model"
 	"pvp_spiderfly/src/tools"
+	"strings"
 	"sync"
-	"time"
 )
 
 const (
 	ChromePath = "/Users/beer/java/chrome-mac/Chromium.app/Contents/MacOS/Chromium"
-	Headless   = false
+	Headless   = true
 	TargetDir  = "./tmp"
-	EntryPoint = "https://10.0.83.1/web/frame/login.html"
+	EntryPoint = "https://www.baidu.com"
 )
 
 func main() {
 
-	domain := tools.GetDomain(EntryPoint)
+	urlParse, _ := url.Parse(EntryPoint)
+	task := &model.Task{
+		EntryPoint:       EntryPoint,
+		EntryPointDomain: urlParse.Scheme + "://" + urlParse.Host,
+		EntryPointHost:   urlParse.Host,
+		TargetDir:        TargetDir,
+	}
 
 	logger.Logger.WithFields(logrus.Fields{
 		"EntryPoint": EntryPoint,
@@ -29,6 +37,7 @@ func main() {
 
 	var wg sync.WaitGroup
 	extraHeaders := map[string]interface{}{}
+
 	browser := engine.InitBrowser(ChromePath, extraHeaders, Headless)
 
 	//request_id => response_url
@@ -42,10 +51,13 @@ func main() {
 				urlMap[ev.DocumentURL] = ev.RedirectResponse.URL
 			}
 		case *network.EventLoadingFinished:
-			wg.Add(1)
 			logger.Logger.WithFields(logrus.Fields{
 				"EventLoadingFinished-RequestID": ev.RequestID.String(),
 			}).Debug()
+
+			localUrl := urlMap[ev.RequestID.String()]
+			delete(urlMap, ev.RequestID.String())
+
 			go func() {
 				c := chromedp.FromContext(browser.Ctx)
 				body, err := network.GetResponseBody(ev.RequestID).Do(cdp.WithExecutor(browser.Ctx, c.Target))
@@ -56,19 +68,22 @@ func main() {
 					defer wg.Done()
 					return
 				}
-				url := urlMap[ev.RequestID.String()]
-				finalPath := tools.GetFilePathByUrl(domain, TargetDir, url)
+				finalPath := tools.GetFilePathByUrl(task, localUrl)
 
 				tools.WriteFile(finalPath, body)
 
-				redirectUrl := urlMap[url]
+				redirectUrl := urlMap[localUrl]
 				if redirectUrl != "" {
-					tools.WriteFile(tools.GetFilePathByUrl(domain, TargetDir, redirectUrl), body)
+					tools.WriteFile(tools.GetFilePathByUrl(task, redirectUrl), body)
 				}
 				defer wg.Done()
 			}()
 
 		case *network.EventResponseReceived:
+			wg.Add(1)
+			if strings.HasPrefix(ev.Response.URL, "data") {
+				return // skip local memory cache)
+			}
 			logger.Logger.WithFields(logrus.Fields{
 				"EventResponseReceived-RequestID": ev.RequestID.String(),
 				"EventResponseReceived-URL":       ev.Response.URL,
@@ -80,7 +95,7 @@ func main() {
 	err := chromedp.Run(browser.Ctx,
 		network.Enable(),
 		chromedp.Navigate(EntryPoint),
-		chromedp.Sleep(time.Second*10), //todo
+		network.SetExtraHTTPHeaders(browser.ExtraHeaders),
 	)
 	if err != nil {
 		logger.Logger.Error(err)
