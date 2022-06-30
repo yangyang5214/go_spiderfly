@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
@@ -12,23 +13,57 @@ import (
 	"pvp_spiderfly/src/tools"
 	"strings"
 	"sync"
+	"time"
 )
 
 const (
 	ChromePath = "/Users/beer/java/chrome-mac/Chromium.app/Contents/MacOS/Chromium"
-	Headless   = true
+	Headless   = false
 	TargetDir  = "./tmp"
-	EntryPoint = "https://www.baidu.com"
+	EntryPoint = "http://10.0.83.172:5004/general/index.php?isIE=0&modify_pwd=0"
+	Cookie     = "USER_NAME_COOKIE=admin; PHPSESSID=jll4nlbjt8spu4pv7id6rh0201; OA_USER_ID=admin; SID_1=13e5e748; KEY_RANDOMDATA=8205"
 )
+
+func TaskActions(task model.Task) chromedp.Tasks {
+	return chromedp.Tasks{
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			// create cookie expiration
+			expr := cdp.TimeSinceEpoch(time.Now().Add(180 * 24 * time.Hour))
+			// add cookies to chrome
+			cookies := strings.Split(task.Cookie, ";")
+			for i := 0; i < len(cookies); i++ {
+				cookieArr := strings.Split(cookies[i], "=")
+				err := network.SetCookie(strings.Trim(cookieArr[0], " "), strings.Trim(cookieArr[1], "")).
+					WithExpires(&expr).
+					WithDomain(task.EntryPointHost).
+					WithHTTPOnly(false).
+					Do(ctx)
+				if err != nil {
+					logger.Logger.Error(err)
+					return err
+				}
+			}
+			return nil
+		}),
+		network.Enable(),
+		chromedp.Navigate(task.EntryPoint),
+		network.SetExtraHTTPHeaders(task.ExtraHeaders),
+	}
+}
 
 func main() {
 
+	extraHeaders := map[string]interface{}{}
+	extraHeaders["User-Agent"] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
+
 	urlParse, _ := url.Parse(EntryPoint)
 	task := &model.Task{
-		EntryPoint:       EntryPoint,
-		EntryPointDomain: urlParse.Scheme + "://" + urlParse.Host,
-		EntryPointHost:   urlParse.Host,
-		TargetDir:        TargetDir,
+		EntryPoint:     EntryPoint,
+		Domain:         urlParse.Scheme + "://" + urlParse.Host,
+		EntryPointHost: urlParse.Host,
+		TargetDir:      TargetDir,
+		ExtraHeaders:   extraHeaders,
+		Cookie:         Cookie,
 	}
 
 	logger.Logger.WithFields(logrus.Fields{
@@ -36,7 +71,6 @@ func main() {
 	}).Info()
 
 	var wg sync.WaitGroup
-	extraHeaders := map[string]interface{}{}
 
 	browser := engine.InitBrowser(ChromePath, extraHeaders, Headless)
 
@@ -92,14 +126,13 @@ func main() {
 		}
 	})
 
-	err := chromedp.Run(browser.Ctx,
-		network.Enable(),
-		chromedp.Navigate(EntryPoint),
-		network.SetExtraHTTPHeaders(browser.ExtraHeaders),
-	)
+	err := chromedp.Run(browser.Ctx, TaskActions(*task))
+
 	if err != nil {
 		logger.Logger.Error(err)
 	}
 	wg.Wait()
+
+	time.Sleep(time.Minute)
 	browser.Close()
 }

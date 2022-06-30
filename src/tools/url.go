@@ -21,7 +21,7 @@ func GetDomain(rawURL string) string {
 }
 
 func GetFilePathByUrl(task *model.Task, url string) string {
-	path := strings.Replace(url, task.EntryPointDomain, "", 1)
+	path := strings.Replace(url, task.Domain, "", 1)
 	fileName := ""
 	if path == "/" {
 		fileName = "index.html"

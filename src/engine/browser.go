@@ -21,6 +21,8 @@ func InitBrowser(chromiumPath string, extraHeaders map[string]interface{}, hasHe
 		chromedp.ExecPath(chromiumPath),
 		chromedp.Flag("headless", hasHeadless),
 		chromedp.Flag("disable-gpu", true),
+		chromedp.Flag("incognito", true),
+		chromedp.Flag("disable-web-security", true),
 		chromedp.Flag("ignore-certificate-errors", true), //ignoreHTTPSErrors
 		chromedp.Flag("no-sandbox", true),
 		chromedp.WindowSize(1920, 1080),

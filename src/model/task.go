@@ -1,8 +1,10 @@
 package model
 
-type Task struct {
+type /**/Task struct {
 	EntryPoint       string
-	EntryPointDomain string
+	Domain string
 	EntryPointHost   string
-	TargetDir  string
+	TargetDir        string
+	Cookie        string
+	ExtraHeaders     map[string]interface{}
 }

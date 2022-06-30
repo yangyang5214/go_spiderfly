@@ -1,4 +1,3 @@
-import json
 import os
 
 from flask import Flask, Response, request
@@ -14,7 +13,7 @@ class RegexConverter(BaseConverter):
         self.regex = regex
 
 
-root_dir = '/Users/beer/beer/go_spiderfly/tmp/www.baidu.com'
+root_dir = None
 
 
 def service_svc(request):
@@ -53,20 +52,18 @@ def read_file(path):
         return Response(status=404)
     with open(path, 'rb') as f:
         content = f.read()
-    content_type = 'Content-Type: text/html; charset=utf-8'
-    try:
-        json.loads(content)
-        content_type = 'application/json; charset=UTF-8'
-    except:
-        pass
-    return Response(content, status=200, content_type=content_type)
+    return Response(content, status=200)
 
 
 app.url_map.converters['regex'] = RegexConverter
 
 if __name__ == '__main__':
+    root_dir = './tmp/10.0.83.172:5004'
     port = 8088
     _uri = '/<regex(r".*"):original_url>'.format()
+    app.add_url_rule(_uri, view_func=sub_path, methods=["GET", "POST"])
+
+    _uri = '/static/<regex(r".*"):original_url>'.format()
     app.add_url_rule(_uri, view_func=sub_path, methods=["GET", "POST"])
 
     app.run(port=port, host='0.0.0.0', debug=False, threaded=True)
