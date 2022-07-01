@@ -16,43 +16,46 @@ class RegexConverter(BaseConverter):
 root_dir = None
 
 
-def service_svc(request):
-    args = request.args
-    if not args:
-        return Response(status=404)
-    action = args.get('action', '')
-    if not action:
-        return Response(status=404)
-    return read_file('json/{}'.format(action))
+def get_file_path(path, full_path):
+    file_path = os.path.join(root_dir, path)
+    if os.path.exists(file_path):
+        return file_path
+    file_path = os.path.join(root_dir, full_path)
+    if os.path.exists(file_path):
+        return file_path
+    return ""
 
 
 def sub_path(original_url=None):
-    path = request.path[1:]
-    if path == '':
-        path = "index.html"
-    final_path = os.path.join(root_dir, path)
-    if os.path.exists(final_path) and os.path.isfile(final_path):
+    path = request.path
+    if path == '/':
+        path = "/index.html"
+    final_path = get_file_path(path[1:], request.full_path[1:])
+    if final_path:
         return read_file(final_path)
-
-    # use full_path try
-    final_path = os.path.join(root_dir, request.full_path[1:])
-    if os.path.exists(final_path) and os.path.isfile(final_path):
-        return read_file(final_path)
-
-    html_map = {}
-    source = html_map.get(request.path, html_map.get(request.full_path))
-    if not source:
-        return Response(status=404)
-
-    return read_file(source)
+    return Response(status=404)
 
 
 def read_file(path):
+    if os.path.isdir(path):
+        path = path[:-1] + '.extra'
     if not os.path.exists(path):
-        return Response(status=404)
+        return Response()
     with open(path, 'rb') as f:
         content = f.read()
-    return Response(content, status=200)
+    content_type = None
+    file_basename = os.path.basename(path)
+    if file_basename.endswith('.css'):
+        content_type = 'text/css'
+    elif file_basename.endswith('.js'):
+        content_type = 'application/javascript'
+    elif file_basename.endswith('.png'):
+        content_type = 'image/png'
+    elif file_basename.endswith('.jpg'):
+        content_type = 'image/jpg'
+    elif file_basename.endswith('.jpeg'):
+        content_type = 'image/jpeg'
+    return Response(content, status=200, content_type=content_type)
 
 
 app.url_map.converters['regex'] = RegexConverter

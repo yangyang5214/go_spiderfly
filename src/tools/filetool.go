@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"pvp_spiderfly/src/logger"
+	"strings"
 )
 
 func WriteFile(finalPath string, content []byte) {
@@ -20,6 +21,13 @@ func WriteFile(finalPath string, content []byte) {
 			"Path": finalPath,
 		}).Info("Save url result")
 
+		// if url = > xxx/home
+		// css file = > xxx/home/index.css
+		// rename home => home.txt
+
+		if !strings.Contains(FileBasename(finalPath), ".") {
+			finalPath = finalPath + ".extra"
+		}
 		if err := ioutil.WriteFile(finalPath, content, os.ModePerm); err != nil {
 			logger.Logger.Error(err)
 		}
@@ -32,4 +40,8 @@ func ExistFile(filename string) bool {
 		return false
 	}
 	return true
+}
+
+func FileBasename(path string) string {
+	return filepath.Base(path)
 }
