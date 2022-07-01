@@ -61,8 +61,8 @@ def read_file(path):
 app.url_map.converters['regex'] = RegexConverter
 
 if __name__ == '__main__':
-    root_dir = './tmp/10.0.83.172:5004'
-    port = 8088
+    root_dir = './tmp/10.0.83.35'
+    port = 18081
     _uri = '/<regex(r".*"):original_url>'.format()
     app.add_url_rule(_uri, view_func=sub_path, methods=["GET", "POST"])
 
