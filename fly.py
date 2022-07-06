@@ -14,6 +14,7 @@ class RegexConverter(BaseConverter):
 
 
 root_dir = None
+port = None
 
 
 def get_file_path(path, full_path):
@@ -23,7 +24,12 @@ def get_file_path(path, full_path):
     file_path = os.path.join(root_dir, full_path)
     if os.path.exists(file_path):
         return file_path
-    return ""
+
+    # 使用 extra 拼接
+    file_path = os.path.join(root_dir, path.rstrip('/') + '.extra')
+    if os.path.exists(file_path):
+        return file_path
+    return
 
 
 def sub_path(original_url=None):
@@ -44,7 +50,7 @@ def read_file(path):
     with open(path, 'rb') as f:
         content = f.read()
     content_type = None
-    file_basename = os.path.basename(path)
+    file_basename = os.path.basename(path).split('?')[0]
     if file_basename.endswith('.css'):
         content_type = 'text/css'
     elif file_basename.endswith('.js'):
@@ -61,8 +67,15 @@ def read_file(path):
 app.url_map.converters['regex'] = RegexConverter
 
 if __name__ == '__main__':
-    root_dir = './tmp/10.0.83.35'
-    port = 18081
+    import sys
+
+    try:
+        root_dir = sys.argv[1]
+        port = sys.argv[2]
+    except:
+        print("python3 fly.py ./tmp/10.0.83.35 8080")
+        exit(-1)
+
     _uri = '/<regex(r".*"):original_url>'.format()
     app.add_url_rule(_uri, view_func=sub_path, methods=["GET", "POST"])
 

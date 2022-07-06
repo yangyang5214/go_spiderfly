@@ -2,13 +2,14 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
+	mapset "github.com/deckarep/golang-set"
 	"github.com/sirupsen/logrus"
 	"net/url"
+	"path/filepath"
 	"pvp_spiderfly/src/config"
 	"pvp_spiderfly/src/engine"
 	"pvp_spiderfly/src/logger"
@@ -23,11 +24,12 @@ const (
 	ChromePath = "/Users/beer/java/chrome-mac/Chromium.app/Contents/MacOS/Chromium"
 	Headless   = false
 	TargetDir  = "/Users/beer/beer/go_spiderfly/tmp"
-	//EntryPoint = "http://10.0.83.172:5004/general/index.php?isIE=0&modify_pwd=0"
-	EntryPoint = "https://10.0.83.35/"
-	//Cookie     = "USER_NAME_COOKIE=admin; OA_USER_ID=admin; PHPSESSID=ugko5e6pf6bc47lps4okodqpq4; SID_1=8d93b584"
+	//EntryPoint = "http://10.0.83.172:5004/"
+	EntryPoint = "https://10.0.83.35/owa/"
 	Cookie = ""
 )
+
+var nodeMap = mapset.NewSet()
 
 func TaskActions(task model.Task) chromedp.Tasks {
 	return chromedp.Tasks{
@@ -61,8 +63,20 @@ func TaskActions(task model.Task) chromedp.Tasks {
 		chromedp.SetValue("document.querySelector('#userName')", "MING/Administrator", chromedp.ByJSPath),
 		chromedp.SetValue("document.querySelector('#password')", "TCC@202206", chromedp.ByJSPath),
 		chromedp.Click("#lgnDiv > div.signInEnter > div", chromedp.ByQuery),
+		//
+		//for owa
+		//chromedp.SetValue("//*[@id='name']", "admin", chromedp.BySearch),
+		//chromedp.SetValue("//*[@id='password']", "admin123", chromedp.BySearch),
+		//chromedp.Click("//*[@class='login_btn']", chromedp.BySearch),
 
 		chromedp.Sleep(10 * time.Second),
+
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			var res []byte
+			chromedp.FullScreenshot(&res, 100).Do(ctx)
+			tools.WriteFile(filepath.Join(task.TargetDir, task.EntryPointHost, "main.jpg"), res)
+			return nil
+		}),
 	}
 }
 
@@ -111,12 +125,17 @@ func main() {
 			localUrl := urlMap[ev.RequestID.String()]
 			delete(urlMap, ev.RequestID.String())
 
+			if localUrl == "" {
+				return
+			}
+
 			wg.Add(1)
 			go func() {
 				c := chromedp.FromContext(browser.Ctx)
 				body, err := network.GetResponseBody(ev.RequestID).Do(cdp.WithExecutor(browser.Ctx, c.Target))
 				if err != nil {
 					logger.Logger.WithFields(logrus.Fields{
+						"Url":             localUrl,
 						"GetResponseBody": err.Error(),
 					}).Error()
 					defer wg.Done()
@@ -151,21 +170,36 @@ func main() {
 	var nodes []*cdp.Node
 
 	_ = chromedp.Run(browser.Ctx, chromedp.Nodes("//*", &nodes, chromedp.BySearch))
+
+	ClickNodes(nodes, browser.Ctx)
+
+	wg.Wait()
+
+	browser.Close()
+}
+
+func ClickNodes(nodes []*cdp.Node, ctx context.Context) {
 	for _, itemNode := range nodes {
+		hash := tools.Md5(tools.StringToByte(append(itemNode.Attributes, itemNode.LocalName)))
+		if nodeMap.Contains(hash) {
+			continue
+		}
 		if !config.AllowedClickNode.Contains(itemNode.LocalName) {
 			continue
 		}
 		if tools.Contains(itemNode.Attributes, "logout") { //todo 待优化
 			continue
 		}
-		fmt.Println("try click ... ")
-		_ = chromedp.Run(browser.Ctx,
+		logger.Logger.WithFields(logrus.Fields{
+			"Attributes": itemNode.Attributes,
+			"LocalName":  itemNode.LocalName,
+		}).Info("try to click node ...")
+
+		_ = chromedp.Run(ctx,
 			chromedp.MouseClickNode(itemNode),
-			chromedp.Sleep(3*time.Second), //todo 有没有更优的方式
+			chromedp.Sleep(5*time.Second), //todo 有没有更优的方式 (一些页面有 lading... 等待 5s)
 		)
+		nodeMap.Add(hash)
+		ClickNodes(itemNode.Children, ctx)
 	}
-
-	wg.Wait()
-
-	browser.Close()
 }

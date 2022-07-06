@@ -10,6 +10,9 @@ import (
 )
 
 func WriteFile(finalPath string, content []byte) {
+	if ExistFile(finalPath) {
+		return //local cache
+	}
 	if err := os.MkdirAll(filepath.Dir(finalPath), os.ModePerm); err != nil {
 		logger.Logger.WithFields(logrus.Fields{
 			"Path": finalPath,

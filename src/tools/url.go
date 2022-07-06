@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"pvp_spiderfly/src/model"
+	"strings"
 )
 
 // GetUrlPath
@@ -21,11 +22,15 @@ func GetDomain(rawURL string) string {
 
 func GetFilePathByUrl(task *model.Task, urlStr string) string {
 	path := GetUrlPath(urlStr)
+	if !strings.HasSuffix(path, "png") {
+		path = strings.Replace(urlStr, task.Domain, "", 1)
+	}
 	fileName := ""
-	if path == "" {
+	if path == "" || path == "/" {
 		fileName = "index.html"
 	} else {
 		fileName = path
 	}
+
 	return filepath.Join(task.TargetDir, task.EntryPointHost, fileName)
 }
